@@ -24,56 +24,30 @@ import kotlin.math.abs
 
 class OverlayService : Service() {
 
-    // ADD YOUR OWN SNIPPETS HERE: one line each (label to code)
-    private val snippets = listOf(
-        "HTML skeleton" to "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title></title>\n  <link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n  \n  <script src=\"script.js\"></script>\n</body>\n</html>",
-        "CSS font-size" to "font-size: ;",
-        "CSS color" to "color: ;",
-        "CSS background" to "background-color: ;",
-        "CSS font-family" to "font-family: , sans-serif;",
-        "CSS text-align" to "text-align: center;",
-        "CSS margin" to "margin: ;",
-        "CSS padding" to "padding: ;",
-        "CSS border" to "border: 1px solid ;",
-        "CSS radius" to "border-radius: ;",
-        "CSS width+height" to "width: ;\nheight: ;",
-        "CSS shadow" to "box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);",
-        "CSS flex center" to "display: flex;\njustify-content: center;\nalign-items: center;",
-        "CSS flex column" to "display: flex;\nflex-direction: column;\ngap: ;",
-        "CSS grid" to "display: grid;\ngrid-template-columns: repeat(3, 1fr);\ngap: ;",
-        "CSS position" to "position: absolute;\ntop: ;\nleft: ;",
-        "CSS hover" to ":hover {\n  \n}",
-        "CSS media query" to "@media (max-width: 600px) {\n  \n}",
-        "querySelectorAll" to "document.querySelectorAll(\"\");",
-        "createElement" to "const el = document.createElement(\"\");",
-        "innerHTML" to "document.getElementById(\"\").innerHTML = \"\";",
-        "input value" to "document.getElementById(\"\").value;",
-        "classList add" to "document.getElementById(\"\").classList.add(\"\");",
-        "classList remove" to "document.getElementById(\"\").classList.remove(\"\");",
-        "style color" to "document.getElementById(\"\").style.color = \"\";",
-        "for loop" to "for (let i = 0; i < ; i++) {\n  \n}",
-        "function" to "function () {\n  \n}",
-        "arrow function" to "const  = () => {\n  \n};",
-        "if else" to "if () {\n  \n} else {\n  \n}",
-        "setTimeout" to "setTimeout(() => {\n  \n}, 1000);",
-        "async fetch" to "async function getData() {\n  const res = await fetch(\"\");\n  const data = await res.json();\n  console.log(data);\n}",
-        "localStorage set" to "localStorage.setItem(\"\", \"\");",
-        "localStorage get" to "localStorage.getItem(\"\");",
-        "console.log" to "console.log();",
-        "getElementById" to "document.getElementById(\"\");",
-        "querySelector" to "document.querySelector(\"\");",
-        "click event" to "document.getElementById(\"\").addEventListener(\"click\", () => {\n  \n});",
-        "set text" to "document.getElementById(\"\").textContent = \"\";",
-        "toggle class" to "document.getElementById(\"\").classList.toggle(\"\");",
-        "fetch" to "fetch(\"\")\n  .then(res => res.json())\n  .then(data => console.log(data));"
-    )
-
     private lateinit var wm: WindowManager
     private lateinit var root: LinearLayout
     private lateinit var params: WindowManager.LayoutParams
-    private lateinit var scroller: ScrollView
+    private lateinit var panelBox: LinearLayout
+    private lateinit var listHolder: LinearLayout
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun category(label: String) = when {
+        label.startsWith("HTML") -> "HTML"
+        label.startsWith("CSS") -> "CSS"
+        else -> "JS"
+    }
+
+    private fun showCategory(cat: String) {
+        listHolder.removeAllViews()
+        allSnippets.filter { category(it.first) == cat }.forEach { (label, code) ->
+            listHolder.addView(Button(this).apply {
+                text = label
+                isAllCaps = false
+                setOnClickListener { copyCode(label, code) }
+            })
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -93,32 +67,42 @@ class OverlayService : Service() {
             layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
         }
 
-        val panel = LinearLayout(this).apply {
+        panelBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
             setBackgroundColor(Color.parseColor("#EE10141A"))
             setPadding(dp(6), dp(6), dp(6), dp(6))
+            layoutParams = LinearLayout.LayoutParams(dp(210), LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        snippets.forEach { (label, code) ->
-            panel.addView(Button(this).apply {
-                text = label
+
+        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("HTML", "CSS", "JS").forEach { cat ->
+            tabs.addView(Button(this).apply {
+                text = cat
                 isAllCaps = false
-                setOnClickListener { copyCode(label, code) }
+                setOnClickListener { showCategory(cat) }
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
         }
-        panel.addView(Button(this).apply {
+
+        listHolder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val scroller = ScrollView(this).apply {
+            addView(listHolder)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240))
+        }
+
+        val close = Button(this).apply {
             text = "Close bubble"
             isAllCaps = false
             setOnClickListener { stopSelf() }
-        })
-
-        scroller = ScrollView(this).apply {
-            visibility = View.GONE
-            addView(panel)
-            layoutParams = LinearLayout.LayoutParams(dp(190), dp(280))
         }
 
+        panelBox.addView(tabs)
+        panelBox.addView(scroller)
+        panelBox.addView(close)
         root.addView(bubble)
-        root.addView(scroller)
+        root.addView(panelBox)
+        showCategory("HTML")
 
         params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -157,8 +141,8 @@ class OverlayService : Service() {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (!moved) {
-                            scroller.visibility =
-                                if (scroller.visibility == View.GONE) View.VISIBLE else View.GONE
+                            panelBox.visibility =
+                                if (panelBox.visibility == View.GONE) View.VISIBLE else View.GONE
                         }
                     }
                 }
